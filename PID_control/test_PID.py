@@ -33,7 +33,7 @@ for j in range(Episode):
     state.insert(0,Kp)
     #print(state)
     State_input = torch.tensor([state],dtype=torch.float32).to(Agent.device)
-    #print(type(state))
+    print(State_input.shape[1])
     
     Action =  Agent.Select_Action(State_input,True)
     #print(f'type : {type(Action)} dim : {Action.ndim} shape :{Action.shape}')
