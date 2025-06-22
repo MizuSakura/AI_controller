@@ -144,7 +144,7 @@ class PER_replay_buffer():
         self.buffer.add(priority, transions)
 
     def Sample(self):
-        idxs, samples, priorities = [], [], []
+        indexes, samples, priorities = [], [], []
 
         total_priority = self.buffer.total_priority()
 
@@ -158,12 +158,12 @@ class PER_replay_buffer():
             index, priority, data = self.buffer.get_leaf(sample_value)
 
             samples.append(data)
-            idxs.append(index)
+            indexes.append(index)
             priorities.append(priority)
 
         priorities_batch = np.array(priorities) / total_priority
         is_weights_sumtree = (self.capacity * priorities_batch) ** (-self.beta)
-        is_weight /= is_weights_sumtree.max()
+        Is_weight /= is_weights_sumtree.max()
 
         self.beta = np.min([1.0, self.beta + self.beta_increment_per_sampling])
 
@@ -174,7 +174,14 @@ class PER_replay_buffer():
         reward = torch.tensor(Reward, dtype= torch.float32, device= self.device).unsqueeze(1)
         next_state = torch.stack( Next_State).to(self.device)
         done = torch.tensor(Done, dtype= torch.float32, device= self.device).unsqueeze(1)
-        is_weight = torch.tensor
+        is_weight = torch.tensor(Is_weight, dtype= torch.float32, device= self.device).unsqueeze(1)
+
+        return state, action, reward, next_state, done, is_weight, indexes
+    
+    def update_priorities(self, index, TD_error):
+        for idx, error in zip(index, TD_error.detach().cpu().numpy()):
+            priority = self._get_priority(error)
+            self.buffer.update(idx, priority)
 
         
         
