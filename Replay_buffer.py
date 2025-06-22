@@ -106,8 +106,75 @@ class Sumtree():
             index = (index - 1) // 2
             self.tree[index] += delta
 
-    def get_leaf(self):
-        pass
+    def get_leaf(self,value):
+        index = 0
+        while index < self.capacity - 1:
+            left = 2 * index + 1 #make left leaves to  index one 
+            right = 2 * index + 2 #make right leaves to index tw
+            if value <= self.tree[left]:
+                index = left
+            else:
+                value -= self.tree[left]
+                index = right
+        data_index = index - (self.capacity - 1)
+        return index, self.tree[index], self.data[data_index]
+    
+    def total_priority(self):
+        return self.tree[0] if self.capacity > 0 else 0.0
     
 class PER_replay_buffer():
-    pass
+    def __init__(self, capacity=1e6, batch_size=256,  alpha=0.6, beta=0.4, device=None):
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        self.capacity = int(capacity)
+        self.batch_size = batch_size
+        self.buffer = Sumtree(self.capacity)
+
+        #hyperparameters for PER
+        self.beta = beta
+        self.alpha = alpha
+        self.epsilon = 1e-6
+        self.beta_increment_per_sampling = 0.001
+
+    def _get_priority(self, error):
+        return (np.abs(error) + self.epsilon) ** self.alpha
+    
+    def Store(self, transions, td_error):
+        priority = self._get_priority(td_error)
+        self.buffer.add(priority, transions)
+
+    def Sample(self):
+        idxs, samples, priorities = [], [], []
+
+        total_priority = self.buffer.total_priority()
+
+        segment = total_priority / self.batch_size
+
+        for i in range(self.batch_size):
+            start_segment = segment * i
+            end_segment = segment * (i + 1)
+            sample_value = random.uniform(start_segment, end_segment)
+            
+            index, priority, data = self.buffer.get_leaf(sample_value)
+
+            samples.append(data)
+            idxs.append(index)
+            priorities.append(priority)
+
+        priorities_batch = np.array(priorities) / total_priority
+        is_weights_sumtree = (self.capacity * priorities_batch) ** (-self.beta)
+        is_weight /= is_weights_sumtree.max()
+
+        self.beta = np.min([1.0, self.beta + self.beta_increment_per_sampling])
+
+        State, Action, Reward, Next_State, Done = zip(*samples)
+
+        state = torch.stack(State).to(self.device)
+        action = torch.tensor( Action, dtype= torch.float32, device= self.device).unsqueeze(1)
+        reward = torch.tensor(Reward, dtype= torch.float32, device= self.device).unsqueeze(1)
+        next_state = torch.stack( Next_State).to(self.device)
+        done = torch.tensor(Done, dtype= torch.float32, device= self.device).unsqueeze(1)
+        is_weight = torch.tensor
+
+        
+        
