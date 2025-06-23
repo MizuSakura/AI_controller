@@ -14,8 +14,7 @@ List_key_ax = ['Start_Fall','End_Fall',
 
 List_key_ah = ['Steady_State', 'Upper_Tolerance', 'Lower_Tolerance',]
 
-color_list={'Start_Fall':"#00ff04",'End_Fall':"#ff0000",
-            'Start_Rise':"#2fff00",'End_Rise':"#ff0000",
+color_list={'Start_Fall':"#00ff04",'End_Fall':"#ff0000",'Start_Rise':"#2fff00",'End_Rise':"#ff0000",
             'Where_Max_Overshoot':"#ff0000",'Where_Max_Undershoot':"#0084ff",'Settling_Time':"#00fbff",
             'Steady_State':"#00ffee", 'Upper_Tolerance':"#fff200", 'Lower_Tolerance':"#00ff11"
             }
