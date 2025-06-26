@@ -67,7 +67,7 @@ class N_step_replay_buffer():
 
 
     def Sample(self):
-        if self.Size() < self.batch_size:
+        if self.Count_size() < self.batch_size:
             return None
         batch = random.sample(self.buffer, self.batch_size)
         State, Action, Reward, Next_State, Done = zip(*batch)
@@ -80,7 +80,7 @@ class N_step_replay_buffer():
 
         return state , action , reward , next_state ,done
 
-    def Size(self):
+    def Count_size(self):
         return len(self.buffer)
     
 class Sumtree():
@@ -184,4 +184,23 @@ class PER_replay_buffer():
             self.buffer.update(idx, priority)
 
         
-        
+class ReplayBufferManager:
+    def __init__(self, buffer_type: str, **kwargs):
+        self.buffer_type = buffer_type.lower()
+        self.buffer = self._init_replaybuffer(**kwargs)
+
+    def _init_replaybuffer(self,**kwargs):
+        if self.buffer_type == 'vanilla':
+            return Vanilla_replay_buffer(**kwargs)
+        elif self.buffer_type == 'n_step':
+            return N_step_replay_buffer(**kwargs)
+        elif self.buffer_type == 'per':
+            return PER_replay_buffer(**kwargs)
+        else:
+            raise ValueError(f"Unknown buffer type: {self.buffer_type}")
+
+    def add_transition(self,State, Action, Reward, Next_State,Done):
+        return self.buffer.Store(State, Action, Reward, Next_State,Done)
+    
+    def sample(self):
+        return self.buffer.Sample()
