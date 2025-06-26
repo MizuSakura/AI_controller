@@ -6,16 +6,27 @@ import numpy as np
 
 class PID_control_watel:
     def __init__(self,radius=5, max_height=10, setpoint=5, Cv_flow_in = 2.8,Cv_flow_out = 0.5,
-                 characteristics_valve = 'linear',dt = 0.1,spect=dict()):
+                 characteristics_valve = 'linear',dt = 0.1,devitive = 0, tolerance = 0.1, spect=None):
         self.setpoint = setpoint
         self.dt = dt
         self.characteristics_valve = characteristics_valve
         self.PID = PID_Agent()
-        self.Water_tank = water_tank(radius=radius,max_height=max_height,setpoint=setpoint,Cv_flow_in=Cv_flow_in,Cv_flow_out=Cv_flow_out,devitive=0,tolerance=0.1,characteristics_valve=self.characteristics_valve,dt=self.dt)
+        
+        self.Water_tank = water_tank(
+            radius=radius,
+            max_height=max_height,
+            setpoint=setpoint,
+            Cv_flow_in=Cv_flow_in,
+            Cv_flow_out=Cv_flow_out,
+            devitive=devitive,
+            tolerance=tolerance,
+            characteristics_valve=self.characteristics_valve,
+            dt=self.dt
+        )
         self.integral = 0
         self.prev_error = 0
         self.water_level = 0
-
+    
         self.water_level_history = []
         self.info = dict()
         self.reward = 0
@@ -23,7 +34,8 @@ class PID_control_watel:
         self.offset_update = float(1e7)
         self.settling_update =  float(1e7)
         self.time_diff_update =  float(1e7)
-
+        if spect is None:
+            spect = {}
         self.spect_overshoot = spect.get('Percent_Overshoot',20)
         self.spect_undershoot =spect.get('Percent_Undershoot',0)
 
@@ -38,7 +50,7 @@ class PID_control_watel:
         
 
     def step(self, Kp, Ki, Kd):
-        error = self.setpoint - self.water_level
+        error = self.setpoint - self.water_level 
         Action = self.PID.compute(error=error, Kp=Kp, Ki=Ki, Kd=Kd,dt=self.dt)
         state, _, done_evn, _, _ = self.Water_tank.step(Action_Agent=Action)
 

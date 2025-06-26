@@ -22,7 +22,7 @@ color_list={'Start_Fall':"#00ff04",'End_Fall':"#ff0000",
 
 Kp, Ki, Kd = 1,0.002,0
 #Agent.load_model('D:/Project_end/DDPG_new/DDPG_control_PID/model3/Agent1000.pth')
-Episode = 1000
+Episode = 1
 reward_list = []
 for j in range(Episode):
     info = {}
@@ -80,3 +80,5 @@ plt.title(f'reward: {reward}')
 plt.grid()
 plt.legend()
 plt.show()
+
+
