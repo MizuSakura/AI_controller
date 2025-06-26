@@ -20,7 +20,7 @@ class Vanilla_replay_buffer():
         self.buffer.append((State, Action, Reward, Next_State, Done))
 
     def Sample(self):
-        if self.Size() < self.batch_size:
+        if self.__len__() < self.batch_size:
             return None
         batch = random.sample(self.buffer, self.batch_size)
         State, Action, Reward, Next_State, Done = zip(*batch)
@@ -32,8 +32,8 @@ class Vanilla_replay_buffer():
         done = torch.tensor(Done, dtype= torch.float32, device= self.device).unsqueeze(1)
 
         return state , action , reward , next_state ,done
-    
-    def Count_size(self):
+
+    def __len__(self):
         return len(self.buffer)
     
 class N_step_replay_buffer():
@@ -62,12 +62,13 @@ class N_step_replay_buffer():
             for idx,(_, _, R, _, D) in enumerate(self.N_step_Buffer):
                 Reward += (self.gamma ** idx) * R
                 if D :
+                    Done = True
                     break
             return Reward , Next_State ,Done
 
 
     def Sample(self):
-        if self.Count_size() < self.batch_size:
+        if self.__len__() < self.batch_size:
             return None
         batch = random.sample(self.buffer, self.batch_size)
         State, Action, Reward, Next_State, Done = zip(*batch)
@@ -79,8 +80,8 @@ class N_step_replay_buffer():
         done = torch.tensor(Done, dtype= torch.float32, device= self.device).unsqueeze(1)
 
         return state , action , reward , next_state ,done
-
-    def Count_size(self):
+    
+    def __len__(self):
         return len(self.buffer)
     
 class Sumtree():
@@ -89,13 +90,17 @@ class Sumtree():
         self.tree = np.zeros(2 * capacity - 1)
         self.data = np.zeros(capacity, dtype=object)
         self.data_pointer = 0
+        self.current_size = 0
 
     def add(self, priority, data):
         index = self.data_pointer + self.capacity - 1
         self.data[self.data_pointer] = data
         self.update(index, priority)
         self.data_pointer += 1
-        
+       
+
+        if self.current_size < self.capacity:
+            self.current_size += 1
         if self.data_pointer >= self.capacity:
             self.data_pointer = 0
 
@@ -122,6 +127,9 @@ class Sumtree():
     def total_priority(self):
         return self.tree[0] if self.capacity > 0 else 0.0
     
+    def __len__(self):
+        return self.current_size
+    
 class PER_replay_buffer():
     def __init__(self, capacity=1e6, batch_size=256,  alpha=0.6, beta=0.4, device=None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -139,9 +147,10 @@ class PER_replay_buffer():
     def _get_priority(self, error):
         return (np.abs(error) + self.epsilon) ** self.alpha
     
-    def Store(self, transions, td_error):
+    def Store(self, State, Action, Reward, Next_State, Done, td_error):
+        transition = Transition(State, Action, Reward, Next_State, Done)
         priority = self._get_priority(td_error)
-        self.buffer.add(priority, transions)
+        self.buffer.add(priority, transition)
 
     def Sample(self):
         indexes, samples, priorities = [], [], []
@@ -162,8 +171,8 @@ class PER_replay_buffer():
             priorities.append(priority)
 
         priorities_batch = np.array(priorities) / total_priority
-        is_weights_sumtree = (self.capacity * priorities_batch) ** (-self.beta)
-        Is_weight /= is_weights_sumtree.max()
+        is_weights_sumtree = (self.buffer.__len__() * priorities_batch) ** (-self.beta)
+        is_weights_sumtree /= is_weights_sumtree.max()
 
         self.beta = np.min([1.0, self.beta + self.beta_increment_per_sampling])
 
@@ -174,7 +183,7 @@ class PER_replay_buffer():
         reward = torch.tensor(Reward, dtype= torch.float32, device= self.device).unsqueeze(1)
         next_state = torch.stack( Next_State).to(self.device)
         done = torch.tensor(Done, dtype= torch.float32, device= self.device).unsqueeze(1)
-        is_weight = torch.tensor(Is_weight, dtype= torch.float32, device= self.device).unsqueeze(1)
+        is_weight = torch.tensor(is_weights_sumtree, dtype= torch.float32, device= self.device).unsqueeze(1)
 
         return state, action, reward, next_state, done, is_weight, indexes
     
@@ -198,9 +207,16 @@ class ReplayBufferManager:
             return PER_replay_buffer(**kwargs)
         else:
             raise ValueError(f"Unknown buffer type: {self.buffer_type}")
-
-    def add_transition(self,State, Action, Reward, Next_State,Done):
-        return self.buffer.Store(State, Action, Reward, Next_State,Done)
-    
+        
+    def add_transition(self, *args, **kwargs):
+        if self.buffer_type == 'per':
+            # args ควรจะเป็น (State, Action, Reward, Next_State, Done)
+            td_error = kwargs.get('td_error')
+            if td_error is None:
+                raise ValueError("td_error must be provided for PER buffer")
+            return self.buffer.Store(*args, td_error=td_error) # ส่ง args และ td_error
+        else:
+            return self.buffer.Store(*args)
+            
     def sample(self):
         return self.buffer.Sample()
