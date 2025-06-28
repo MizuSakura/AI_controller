@@ -56,3 +56,39 @@ class ParameterNoise:
     def reset(self):
         self.perturbed_model.load_state_dict(copy.deepcopy(self.actor_model.state_dict()))
         self.apply_noise()
+
+class NoiseManager:
+    def __init__(self, noise_type='ou', action_dim=1, actor_model=None):
+        self.noise_type = noise_type
+        self.action_dim = action_dim
+        self.actor_model = actor_model
+
+        self.noise = self._create_noise()
+
+    def _create_noise(self,**kwargs):
+        if self.noise_type == 'ou':
+            return OUNoise(action_dim=self.action_dim, **kwargs)
+        elif self.noise_type == 'gaussian':
+            return GaussianNoise(action_dim=self.action_dim, **kwargs)
+        elif self.noise_type == 'parameter':
+            if self.actor_model is None:
+                raise ValueError("actor_model must be provided for ParameterNoise")
+            return ParameterNoise(actor_model=self.actor_model, **kwargs)
+        else:
+            raise ValueError(f"Unknown noise type: {self.noise_type}")
+
+    def reset(self):
+        self.noise.reset()
+
+    def sample(self, state=None):
+        if self.noise_type == 'parameter':
+            if state is None:
+                raise ValueError("state must be provided for parameter noise sampling")
+            return self.noise.get_perturbed_action(state)
+        else:
+            return self.noise.sample()
+
+    def change_noise_type(self, new_type):
+        self.noise_type = new_type
+        self.noise = self._create_noise()
+            
