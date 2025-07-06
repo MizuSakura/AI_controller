@@ -92,33 +92,6 @@ class Logger:
         else:
             raise ValueError("CSV file not found. Please check the file extension ")
 
-
-# import random
-
-# # Create Logger instance
-# logger = Logger()
-
-# # Simulate large data: 100,000 rows for Temperature and Humidity
-# num_rows = 100_000
-# temperature_data = [random.uniform(20, 40) for _ in range(num_rows)]
-# humidity_data = [random.uniform(40, 80) for _ in range(num_rows)]
-
-# # Add large dataset
-# logger.add_data_log(["Temperature", "Humidity"], [temperature_data, humidity_data])
-# print("✅ Added large Temperature and Humidity data.")
-
-# # Add another large dataset with new columns
-# pressure_data = [random.uniform(990, 1020) for _ in range(num_rows)]
-# wind_speed_data = [random.uniform(0, 20) for _ in range(num_rows)]
-
-# logger.add_data_log(["Pressure", "WindSpeed"], [pressure_data, wind_speed_data])
-# print("✅ Added large Pressure and WindSpeed data.")
-
-# # Show the shape of the DataFrame
-# print(f"DataFrame shape: {logger.df.shape}")
-
-# # Optionally show a small sample (to avoid flooding your terminal)
-# print(logger.df.head())
-
-# # Save large CSV
-# logger.save_to_csv("large_test_log")
+class Plot_graph:
+    def __init__(self):
+        pass
