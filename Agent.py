@@ -7,6 +7,10 @@ import numpy as np
 from copy import deepcopy
 import torch.nn.functional as F
 import torch.optim as optim
+from pathlib import Path
+from datetime import datetime
+import os
+
 class PID_Agent:
     def __init__(self):
         self.integral = 0.0
@@ -42,6 +46,7 @@ class DDPGAgent:
         self.noise_manager = NoiseManager(Noise_type, action_dim=action_dim, actor_model=self.actor)
 
         self.gamma = 0.99
+        self.current_path = Path(os.getcwd())
 
     def select_action(self, state, Add_Noise=True):
         if not isinstance(state, torch.Tensor):
@@ -55,7 +60,7 @@ class DDPGAgent:
 
         action = self.rescale_action(action, self.min_action, self.max_action)
         action = np.clip(action, self.min_action, self.max_action)
-        return action
+        return action.item()
 
     def rescale_action(self,raw_action,min_action,max_action):
         raw_ar_action = np.array(raw_action)
@@ -108,3 +113,41 @@ class DDPGAgent:
     def soft_update(self, net, net_target, tau=0.005):
         for target_param, param in zip(net_target.parameters(), net.parameters()):
             target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
+
+    def save_model(self, file_name ='Agent.pth', folder_name=None,path_name = None):
+        pass
+        if not file_name.endswith('.pth'):
+            file_name += '.pth'
+        if path_name is not None:
+            path_to_save = Path(path_name)
+        else:
+            path_to_save = self.current_path
+        if folder_name is None:
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            folder_to_save = path_to_save / today
+        else:
+            folder_to_save = path_to_save / folder_name
+        folder_to_save.mkdir(parents=True, exist_ok=True)
+        path_file = folder_to_save / file_name
+
+        torch.save({
+            'actor_state_dict': self.actor.state_dict(),
+            'critic_state_dict': self.critic.state_dict(),
+            'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
+            'critic_optimizer_state_dict': self.critic_optimizer.state_dict()
+        }, path_file)
+
+    def load_model(self,path_file):
+        path = Path(path_file)
+        if path.suffix.lower() == ".pth":
+            try:
+                checkpoint = torch.load(path_file, map_location=self.device)
+                self.actor.load_state_dict(checkpoint['actor_state_dict'])
+                self.critic.load_state_dict(checkpoint['critic_state_dict'])
+                self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
+                self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+            except Exception as e:
+                print("File not found. Please check the file path and file name.")
+        else:
+            raise ValueError("pth file not found. Please check the file extension ")

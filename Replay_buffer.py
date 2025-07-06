@@ -38,7 +38,7 @@ class Vanilla_replay_buffer():
     
 class N_step_replay_buffer():
     def __init__(self, buffer_size = 1e6, batch_size = 256,N_step = 3, gamma = 0.99,device=None):
-        self.buffer = deque(maxlen=buffer_size)
+        self.buffer = deque(maxlen=int(buffer_size))
         self.batch_size = batch_size
         self.N_step = N_step
         self.N_step_Buffer = deque(maxlen=self.N_step)
