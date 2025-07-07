@@ -13,7 +13,9 @@ env = RC_environment(R=2153,C=0.01,setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100',port=502)
 logger = Logger()
 episode = 100
-MAX_RUNTIME = timedelta(hours = 0, minutes = 10,seconds = 0) 
+MAX_RUNTIME = timedelta(hours = 0, minutes = 1,seconds = 0) 
+Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/n_step_round_1'
+
 def clear_lines(n=2):
     for _ in range(n):
         sys.stdout.write('\x1b[1A')
@@ -27,6 +29,7 @@ for ep in range(episode):
     done = False
     step = 0
     data_log_state,data_log_action,data_log_reward,data_log_actor_loss,data_log_critc_loss = [],[],[],[],[]
+    run_time = []
     Critic_loss, Actor_loss = None, None
     start_time = datetime.now()
    
@@ -48,7 +51,9 @@ for ep in range(episode):
         Actor_loss, Critic_loss = Agent.optimize_model()
         data_log_actor_loss.append(Actor_loss)
         data_log_critc_loss.append(Critic_loss)
-
+        now = datetime.now()
+        formatted_time = now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        run_time.append(formatted_time)
         
     
 
@@ -72,8 +77,8 @@ for ep in range(episode):
                 time.sleep(5)
                 break
 
-    Agent.save_model(file_name=f'test_Agent_{ep}.pth')
-    logger.add_data_log(columns_name=['action', 'reward', 'state', 'actor_loss', 'critic_loss'],
-                        data_list=[data_log_action, data_log_reward, data_log_state, data_log_actor_loss, data_log_critc_loss])
-    logger.save_to_csv(f'data_log{ep}_.csv','Auto_save_data_log')
+    Agent.save_model(file_name=f'test_Agent_{ep}.pth',folder_name=Foldor+r'/model')
+    logger.add_data_log(columns_name=['time','train_status','action', 'reward', 'state', 'actor_loss', 'critic_loss'],
+                        data_list=[run_time,done,data_log_action, data_log_reward, data_log_state, data_log_actor_loss, data_log_critc_loss])
+    logger.save_to_csv(f'data_log{ep}_.csv',folder_name=Foldor+r'/data_log')
 
