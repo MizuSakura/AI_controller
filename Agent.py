@@ -102,7 +102,7 @@ class DDPGAgent:
         self.actor_optimizer.step()
 
         if self.replay_buffer.buffer_type == 'per':
-            self.replay_buffer.update_priorities(indexes, td_error.abs().cpu().numpy())
+            self.replay_buffer.buffer.update_priorities(indexes, td_error.detach().cpu().numpy())
 
         self.soft_update(self.critic, self.target_critic)
         self.soft_update(self.actor, self.target_actor)
@@ -113,6 +113,22 @@ class DDPGAgent:
     def soft_update(self, net, net_target, tau=0.005):
         for target_param, param in zip(net_target.parameters(), net.parameters()):
             target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
+
+    def compute_td_error(self, state, action, reward, next_state, done):
+        with torch.no_grad():
+            if not isinstance(action, torch.Tensor):
+                action = torch.tensor([[action]], dtype=torch.float32, device=self.device)
+            if len(state.shape) == 1:
+                state = state.unsqueeze(0)
+            if len(next_state.shape) == 1:
+                next_state = next_state.unsqueeze(0)
+
+            next_action = self.target_actor(next_state)
+            target_q = self.target_critic(next_state, next_action)
+            target_q = reward + self.gamma * (1 - done) * target_q
+            current_q = self.critic(state, action)
+            td_error = (target_q - current_q).cpu().numpy().flatten()[0]
+            return td_error
 
     def save_model(self, file_name ='Agent.pth', folder_name=None,path_name = None):
         pass
@@ -147,6 +163,7 @@ class DDPGAgent:
                 self.critic.load_state_dict(checkpoint['critic_state_dict'])
                 self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
                 self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+                print(f"Model loaded successfully from {path_file}")
             except Exception as e:
                 print("File not found. Please check the file path and file name.")
         else:
