@@ -20,7 +20,8 @@ def clear_lines(n=2):
         sys.stdout.write('\x1b[2K')
     sys.stdout.flush()
 
-Agent.load_model('D:/Project_end/DDPG_NEW_git/2025-07-06/test_Agent_99.pth')
+Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\round_1\model\test_Agent_100.pth')
+time.sleep(2)  # Wait for the Modbus connection to stabilize
 step = 0
 modbus.connect()
 try:
@@ -28,7 +29,7 @@ try:
         analog_read = modbus.analog_read(1)
         state = float(analog_read) / 27647 * Agent.max_action 
         state_tensor = torch.tensor([state] ,dtype= torch.float32 ,device=Agent.device)
-        action = Agent.select_action(state_tensor)
+        action = Agent.select_action(state_tensor,Add_Noise=False)
         
         analog_value = (action/ Agent.max_action) * 27647
         modbus.write_holding_register(1025, int(analog_value))
@@ -41,5 +42,6 @@ try:
             sys.stdout.write(f'{line1}\n')
             sys.stdout.flush()
 except KeyboardInterrupt:
+    modbus.write_holding_register(1025, 0)
     modbus.disconnect()
     print("\nTraining interrupted by user.")
