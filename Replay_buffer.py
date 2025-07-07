@@ -188,7 +188,7 @@ class PER_replay_buffer():
         return state, action, reward, next_state, done, is_weight, indexes
     
     def update_priorities(self, index, TD_error):
-        for idx, error in zip(index, TD_error.detach().cpu().numpy()):
+        for idx, error in zip(index, TD_error):
             priority = self._get_priority(error)
             self.buffer.update(idx, priority)
 
