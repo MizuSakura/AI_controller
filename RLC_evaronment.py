@@ -15,7 +15,7 @@ class RC_environment:
 
     def reset(self):
         """Reset the environment to its initial state."""
-        self.voltage_capacitor = 0.0
+        self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
         self.time = 0.0
         reward = 0
         Done = False
