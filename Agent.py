@@ -16,7 +16,7 @@ class PID_Agent:
         self.integral = 0.0
         self.last_error = 0.0
 
-    def compute(self, error, Kp, Ki, Kd, dt):
+    def compute(self, error, Kp=1, Ki=0, Kd=0, dt=0.01):
         self.integral += error * dt
         derivative = (error - self.last_error) / dt
         self.last_error = error
