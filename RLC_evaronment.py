@@ -6,16 +6,25 @@ class RC_environment:
         self.C = C  # Capacitance in farads
         self.dt = dt  # Time step in seconds
         self.voltage_capacitor = 0.0  # Initial voltage across the capacitor
-        self.time = 0.0
+        
 
         self.setpoint = setpoint
         self.maximumn_volt = 10
 
+        self.time = 0.0
+        self.round_reset = 0
+        self.per_error = 0
+
         self.reset()
 
     def reset(self):
-        """Reset the environment to its initial state."""
-        self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
+        if self.round_reset < 100:
+            self.voltage_capacitor = max(0,(self.round_reset/100)*self.maximumn_volt)
+        else:
+            self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
+        
+        self.per_error = self.setpoint - self.voltage_capacitor
+        self.round_reset +=1
         self.time = 0.0
         reward = 0
         Done = False
@@ -30,7 +39,7 @@ class RC_environment:
         reward = self.reward_function(abs(error))
 
         Done = abs(error) <= 0.1
-
+        self.per_error = error
         return float(self.voltage_capacitor) , float(reward) ,Done
     
     def reward_function(self,error):
@@ -40,3 +49,7 @@ class RC_environment:
 
         return reward
 
+    def reward_delta(self,error):
+        delta_error = abs(self.per_error) - abs(error)
+        if delta_error < 0:
+            pass
