@@ -61,7 +61,9 @@ class Logger:
         if column_name is None:
             return None
         elif column_name in self.df.columns:
-            return self.df[column_name]
+            data = self.df[column_name]
+            data = data.to_numpy()
+            return data
         else:
             print(f'column: {column_name} does not exist in the data')
             return
