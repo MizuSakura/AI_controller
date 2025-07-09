@@ -14,21 +14,28 @@ class RC_environment:
         self.time = 0.0
         self.round_reset = 0
         self.per_error = 0
+        self.per_action = 0
+        self.penalize_count = 0
+        self.intergal_error = 0
+
 
         self.reset()
 
     def reset(self):
         if self.round_reset < 100:
-            self.voltage_capacitor = max(0,(self.round_reset/100)*self.maximumn_volt)
+            self.voltage_capacitor = np.random.uniform(0,max(0,(self.round_reset/100)*self.maximumn_volt))
         else:
             self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
         
         self.per_error = self.setpoint - self.voltage_capacitor
         self.round_reset +=1
+        self.penalize_count = 0
         self.time = 0.0
         reward = 0
         Done = False
-        return self.voltage_capacitor,reward,Done
+        self.intergal_error = 0
+
+        return self.voltage_capacitor,reward,Done,self.per_error,self.per_action,self.intergal_error,0
     
     def step(self, voltage_source):
         deltal_volt = (voltage_source - self.voltage_capacitor) / (self.R * self.C)
@@ -39,17 +46,29 @@ class RC_environment:
         reward = self.reward_function(abs(error))
 
         Done = abs(error) <= 0.1
+
         self.per_error = error
-        return float(self.voltage_capacitor) , float(reward) ,Done
+        self.per_action = voltage_source
+        self.intergal_error += error * self.dt
+
+        return float(self.voltage_capacitor) , float(reward) ,Done,self.per_error,self.per_action,self.intergal_error,deltal_volt
     
     def reward_function(self,error):
 
-        parameter = self.maximumn_volt / (0.3 * self.maximumn_volt**2)
+        parameter = self.setpoint / (0.3 * self.setpoint**2)
         reward = np.exp(-(parameter)*(error))
+        reward_delta = self.reward_delta(error=error,per_error=self.per_error)
 
-        return reward
+        return reward+(reward_delta)
 
-    def reward_delta(self,error):
-        delta_error = abs(self.per_error) - abs(error)
-        if delta_error < 0:
-            pass
+    def reward_delta(self,error,per_error):
+        delta_error = abs(per_error) - abs(error)
+        waight = 101
+        if delta_error > 0:
+           
+            self.penalize_count = 0
+            delta_error = delta_error * waight
+        else:
+            self.penalize_count +=0.1
+            delta_error = -abs(delta_error* waight * (1 + self.penalize_count))
+        return delta_error
