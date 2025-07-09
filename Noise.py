@@ -17,6 +17,31 @@ class OUNoise:
         dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.action_dim)
         self.state += dx
         return self.state
+
+class OU_Noise_decay:
+    def __init__(self, action_dim=1, mu=0.0, theta=0.15, sigma=0.2, sigma_min=0.01, decay_rate=0.99995):
+        self.mu = mu
+        self.theta = theta
+        self.sigma = sigma
+        self.initial_sigma = sigma
+        self.sigma_min = sigma_min
+        self.decay_rate = decay_rate  # ค่าที่ใช้ลด sigma
+        self.action_dim = action_dim
+        self.state = np.ones(self.action_dim) * self.mu
+        self.step = 0
+
+    def reset(self):
+        self.state = np.ones(self.action_dim) * self.mu
+        self.step = 0
+        self.sigma = self.initial_sigma
+
+    def sample(self):
+        # ลด sigma แบบ exponential decay
+        self.sigma = max(self.sigma_min, self.initial_sigma * (self.decay_rate ** self.step))
+        dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.action_dim)
+        self.state += dx
+        self.step += 1
+        return self.state
     
 class GaussianNoise:
     def __init__(self, action_dim, mean=0.0, std=0.1, min_std=0.01, decay=0.995):
@@ -70,6 +95,8 @@ class NoiseManager:
             return OUNoise(action_dim=self.action_dim, **kwargs)
         elif self.noise_type == 'gaussian':
             return GaussianNoise(action_dim=self.action_dim, **kwargs)
+        elif self.noise_type == 'ou_decay':
+            return OU_Noise_decay(action_dim=self.action_dim,**kwargs)
         elif self.noise_type == 'parameter':
             if self.actor_model is None:
                 raise ValueError("actor_model must be provided for ParameterNoise")
