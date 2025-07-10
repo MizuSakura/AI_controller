@@ -23,7 +23,7 @@ class RC_environment:
 
     def reset(self):
         if self.round_reset < 100:
-            self.voltage_capacitor = np.random.uniform(0,max(0,(self.round_reset/100)*self.maximumn_volt))
+            self.voltage_capacitor = max(0,(self.round_reset/100)*self.maximumn_volt)
         else:
             self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
         

@@ -9,14 +9,15 @@ from datetime import datetime, timedelta
 import time
 state_dim_list = ["state","reward","Done","per_error","per_action","intergal_error","deltal_volt","setpoint"]
 
-Agent = DDPGAgent(state_dim=len(state_dim_list),action_dim=1,min_action=0,max_action=10,replay_buffer='n_step',Noise_type='ou_decay')
+Agent = DDPGAgent(state_dim=len(state_dim_list),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
 env = RC_environment(R=2153,C=0.01,setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100',port=502)
 logger = Logger()
 episode = 100
 MAX_RUNTIME = timedelta(hours = 0, minutes = 10,seconds = 0) 
-Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/n_step_round_4'
-#Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\n_step_round_1\model\test_Agent_51.pth')
+Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/n_step_round_5'
+Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\n_step_round_4\model\test_Agent_329.pth')
+time.sleep(2)
 def clear_lines(n=2):
     for _ in range(n):
         sys.stdout.write('\x1b[1A')
@@ -27,6 +28,8 @@ def clear_lines(n=2):
 try:
     for ep in range(0,1000):
         state,reward,Done,per_error,per_action,intergal,deltal_volt= env.reset()
+        if ep % 200 == 0:
+            env.round_reset = 0
         done = False
         step = 0
         data_log_state,data_log_action,data_log_reward,data_log_actor_loss,data_log_critc_loss = [],[],[],[],[]
