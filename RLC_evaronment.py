@@ -1,5 +1,6 @@
 import numpy as np
-
+from collections import deque
+from itertools import chain
 class RC_environment:
     def __init__(self, R=1.0, C=1.0, dt=0.01,setpoint = 5):
         self.R = R  # Resistance in ohms
@@ -15,7 +16,6 @@ class RC_environment:
         self.round_reset = 0
         self.per_error = 0
         self.per_action = 0
-        self.penalize_count = 0
         self.intergal_error = 0
 
 
@@ -29,46 +29,107 @@ class RC_environment:
         
         self.per_error = self.setpoint - self.voltage_capacitor
         self.round_reset +=1
-        self.penalize_count = 0
         self.time = 0.0
-        reward = 0
         Done = False
-        self.intergal_error = 0
+        self.per_action = 0
 
-        return self.voltage_capacitor,reward,Done,self.per_error,self.per_action,self.intergal_error,0
+        return self.voltage_capacitor,self.per_action,Done
     
-    def step(self, voltage_source):
+    def step(self, voltage_source=0):
         deltal_volt = (voltage_source - self.voltage_capacitor) / (self.R * self.C)
         self.voltage_capacitor += deltal_volt * self.dt
         self.time += self.dt
 
         error = self.setpoint - self.voltage_capacitor
-        reward = self.reward_function(abs(error))
 
         Done = abs(error) <= 0.1
 
         self.per_error = error
         self.per_action = voltage_source
-        self.intergal_error += error * self.dt
 
-        return float(self.voltage_capacitor) , float(reward) ,Done,self.per_error,self.per_action,self.intergal_error,deltal_volt
+        return float(self.voltage_capacitor),voltage_source,Done
     
-    def reward_function(self,error):
+class ComputeState:
+    def __init__(self, c_retroactive_action=5, c_retroactive_error=5,
+                 c_retroactive_state=5, c_retroactive_setpoint=5):
+        self.action_memory = deque([0.0] * c_retroactive_action, maxlen=c_retroactive_action)
+        self.error_memory = deque([0.0] * c_retroactive_error, maxlen=c_retroactive_error)
+        self.state_memory = deque([0.0] * c_retroactive_state, maxlen=c_retroactive_state)
+        self.setpoint_memory = deque([0.0] * c_retroactive_setpoint, maxlen=c_retroactive_setpoint)
 
-        parameter = self.setpoint / (0.3 * self.setpoint**2)
-        reward = np.exp(-(parameter)*(error))
-        reward_delta = self.reward_delta(error=error,per_error=self.per_error)
+        self.span_action = 10
+        self.max_action_scale = 1
+        self.min_action_scale = -1
+        self.max_error_scale = 2
+        self.min_error_scale = 0
+        self.parameter_reward_action = 0.33
 
-        return reward+(reward_delta)
+        self.init_status = False
 
-    def reward_delta(self,error,per_error):
-        delta_error = abs(per_error) - abs(error)
-        waight = 101
-        if delta_error > 0:
-           
-            self.penalize_count = 0
-            delta_error = delta_error * waight
+    def _init_memory(self, action, error, state, setpoint):
+        self.action_memory = deque([action] * self.action_memory.maxlen, maxlen=self.action_memory.maxlen)
+        self.error_memory = deque([error] * self.error_memory.maxlen, maxlen=self.error_memory.maxlen)
+        self.state_memory = deque([state] * self.state_memory.maxlen, maxlen=self.state_memory.maxlen)
+        self.setpoint_memory = deque([setpoint] * self.setpoint_memory.maxlen, maxlen=self.setpoint_memory.maxlen)
+        self.init_status = True
+
+    def reset(self, action=None, state=None, setpoint=None):
+        if action is not None and state is not None and setpoint is not None:
+            error = setpoint - state
+            self._init_memory(action, error, state, setpoint)
         else:
-            self.penalize_count +=0.1
-            delta_error = -abs(delta_error* waight * (1 + self.penalize_count))
-        return delta_error
+            def reset_mem(mem): return deque([0.0] * len(mem), maxlen=mem.maxlen)
+            self.action_memory = reset_mem(self.action_memory)
+            self.error_memory = reset_mem(self.error_memory)
+            self.state_memory = reset_mem(self.state_memory)
+            self.setpoint_memory = reset_mem(self.setpoint_memory)
+            self.init_status = False
+
+    def return_state(self, action=0.0, state=0.0, setpoint=0.0):
+        error = setpoint - state
+
+        if not self.init_status:
+            self._init_memory(action, error, state, setpoint)
+
+        self.action_memory.append(action)
+        self.error_memory.append(error)
+        self.state_memory.append(state)
+        self.setpoint_memory.append(setpoint)
+
+        return list(chain(self.action_memory, self.error_memory,self.state_memory, self.setpoint_memory))
+    
+
+    def reward_funtion_action(self):
+        actions = list(self.action_memory)
+        reward = 0
+        for i in range(1,len(actions)):
+            delta = abs(actions[i] - actions[i -1])
+            reward += (self.max_action_scale - self.min_action_scale) * np.exp(-self.parameter_reward_action * (delta)) + self.min_action_scale
+        reward = reward/len(actions)
+        
+        return reward
+
+        
+    def reward_function_error(self):
+        errors = list(self.error_memory)
+        setpoints = list(self.setpoint_memory)
+        stack_reward = 0.0
+        for e, sp in zip(errors, setpoints):
+            parameter  = self.Auto_parameter_setpoint(sp=sp)
+            stack_reward += (self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(e)) + self.min_error_scale
+
+        return stack_reward/ len(self.error_memory)
+
+
+    def Auto_parameter_setpoint(self,sp):
+        parameter = sp / (0.3 * sp**2)
+        return parameter
+    
+    def count_dim(self):
+        return (len(self.action_memory) + len(self.error_memory) 
+                +len(self.state_memory) + len(self.setpoint_memory))
+    
+    def return_reward(self):
+        reward = self.reward_function_error() + self.reward_funtion_action()
+        return reward
+        

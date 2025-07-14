@@ -1,5 +1,5 @@
 from Agent import DDPGAgent
-from RLC_evaronment import RC_environment
+from RLC_evaronment import RC_environment,compute_state
 from comunucation import ModbusTCP
 from Logging_andplot import Logger
 
@@ -7,16 +7,19 @@ import torch
 import sys
 from datetime import datetime, timedelta
 import time
-state_dim_list = ["state","reward","Done","per_error","per_action","intergal_error","deltal_volt","setpoint"]
 
-Agent = DDPGAgent(state_dim=len(state_dim_list),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
+com_pute = compute_state(c_retroactive_action=5,c_retroactive_error=5,c_retroactive_setpoint=5)
+print(com_pute.count_dim)
+Agent = DDPGAgent(state_dim= com_pute.count_dim,action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
 env = RC_environment(R=2153,C=0.01,setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100',port=502)
 logger = Logger()
+
+
 episode = 100
 MAX_RUNTIME = timedelta(hours = 0, minutes = 10,seconds = 0) 
-Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/n_step_round_5'
-Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\n_step_round_4\model\test_Agent_329.pth')
+Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/per_new'
+Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\per_new\model\test_Agent_58.pth')
 time.sleep(2)
 def clear_lines(n=2):
     for _ in range(n):
@@ -24,10 +27,14 @@ def clear_lines(n=2):
         sys.stdout.write('\x1b[2K')
     sys.stdout.flush()
 
-
+env.round_reset = 58
 try:
-    for ep in range(0,1000):
-        state,reward,Done,per_error,per_action,intergal,deltal_volt= env.reset()
+    for ep in range(58,1000):
+        state,per_action,Done= env.reset()
+        com_pute.reset()
+        state_return = com_pute.retrun_state(action=per_action,state=state ,setpoint= env.setpoint)
+        
+        reward = com_pute.reward_function_calurate()
         if ep % 200 == 0:
             env.round_reset = 0
         done = False
@@ -37,14 +44,22 @@ try:
         Critic_loss, Actor_loss = None, None
         start_time = datetime.now()
         Agent.noise_manager.reset()
+        
         while not done:
             data_log_state.append(state)
 
-            state_tensor = torch.tensor([state,reward,Done,per_error,per_action,intergal,deltal_volt,env.setpoint] ,dtype= torch.float32 ,device=Agent.device)
+            state_tensor = torch.tensor(state_return ,dtype= torch.float32 ,device=Agent.device)
+            
             action = Agent.select_action(state_tensor,Add_Noise=True)
-            next_state,reward,Done,per_error,per_action,intergal,deltal_volt = env.step(action)
-            next_state_tensor = torch.tensor([next_state,reward,Done,per_error,per_action,intergal,deltal_volt,env.setpoint], dtype= torch.float32, device= Agent.device)
+            next_state, per_action, Done= env.step(action)
+            state_return_next = com_pute.retrun_state(action=per_action,state=state ,setpoint= env.setpoint)
+
+            next_state_tensor = torch.tensor(state_return_next ,dtype= torch.float32 ,device=Agent.device)
+            reward = com_pute.reward_function_calurate()
             state = next_state
+
+
+            
 
             data_log_action.append(action)
             data_log_reward.append(reward)
