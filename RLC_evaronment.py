@@ -22,18 +22,27 @@ class RC_environment:
         self.reset()
 
     def reset(self):
-        if self.round_reset < 100:
-            self.voltage_capacitor = max(0,(self.round_reset/100)*self.maximumn_volt)
+        min_diff = 0.5 
+        round = 5
+        spread = (self.round_reset / 100) * self.maximumn_volt
+
+        block = (self.round_reset // round)  
+
+        if block % 2 == 0:
+            low = max(0, self.setpoint - spread)
+            high = self.setpoint - min_diff
         else:
-            self.voltage_capacitor = np.random.uniform(0, self.maximumn_volt)
-        
+            low = self.setpoint + min_diff
+            high = min(self.maximumn_volt, self.setpoint + spread)
+
+        self.voltage_capacitor = np.random.uniform(low=low, high=high)
         self.per_error = self.setpoint - self.voltage_capacitor
-        self.round_reset +=1
+        self.round_reset += 1
         self.time = 0.0
         Done = False
         self.per_action = 0
 
-        return self.voltage_capacitor,self.per_action,Done
+        return self.voltage_capacitor, self.per_action, Done
     
     def step(self, voltage_source=0):
         deltal_volt = (voltage_source - self.voltage_capacitor) / (self.R * self.C)
@@ -63,6 +72,8 @@ class ComputeState:
         self.max_error_scale = 2
         self.min_error_scale = 0
         self.parameter_reward_action = 0.33
+        self.max_state = 10
+        self.min_state = 0
 
         self.init_status = False
 
@@ -110,26 +121,57 @@ class ComputeState:
         return reward
 
         
+
     def reward_function_error(self):
-        errors = list(self.error_memory)
-        setpoints = list(self.setpoint_memory)
-        stack_reward = 0.0
-        for e, sp in zip(errors, setpoints):
-            parameter  = self.Auto_parameter_setpoint(sp=sp)
-            stack_reward += (self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(e)) + self.min_error_scale
+        error = list(self.error_memory)
+        sp = list(self.setpoint_memory)
+        stack_reward = 0
+        delta = 0
+        stack = 0
+        for i in range(1,len(error)):
+            parameter  = self.Auto_parameter_setpoint(sp=sp[i])
+            delta = abs(error[i]) - abs(error[i-1])
+            if delta < 0 :
+                stack_reward += (self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(error[i])) + self.min_error_scale
 
-        return stack_reward/ len(self.error_memory)
+            else:
+                stack_reward+= -( abs((self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(error[i])) + self.min_error_scale)) * stack
+                stack +=1
+        
+        return stack_reward/ len(self.error_memory),stack
+    
+    def reward_function_error(self):
+        error = list(self.error_memory)
+        sp = list(self.setpoint_memory)
 
+        stack_reward = 0
+        for i in range(1,len(error)):
+            parameter  = self.Auto_parameter_setpoint(sp=sp[i])
+            delta = abs(error[i]) - abs(error[i - 1])
+            if delta < 0:
+                pass
+                
+            else:
+                pass
 
     def Auto_parameter_setpoint(self,sp):
         parameter = sp / (0.3 * sp**2)
         return parameter
+    
+    
     
     def count_dim(self):
         return (len(self.action_memory) + len(self.error_memory) 
                 +len(self.state_memory) + len(self.setpoint_memory))
     
     def return_reward(self):
-        reward = self.reward_function_error() + self.reward_funtion_action()
+       
+        reward_error,stack = self.reward_function_error() 
+        reward_action = self.reward_funtion_action()
+        if stack > 1:
+            reward = -abs(reward_action + reward_error)
+        else:
+            reward = reward_action + reward_error
+
         return reward
         

@@ -1,5 +1,5 @@
 from Agent import DDPGAgent
-from RLC_evaronment import RC_environment,compute_state
+from RLC_evaronment import RC_environment,ComputeState
 from comunucation import ModbusTCP
 from Logging_andplot import Logger
 
@@ -8,18 +8,18 @@ import sys
 from datetime import datetime, timedelta
 import time
 
-com_pute = compute_state(c_retroactive_action=5,c_retroactive_error=5,c_retroactive_setpoint=5)
-print(com_pute.count_dim)
-Agent = DDPGAgent(state_dim= com_pute.count_dim,action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
+com_pute = ComputeState(c_retroactive_action=5,c_retroactive_error=5,c_retroactive_setpoint=5)
+print(com_pute.count_dim())
+Agent = DDPGAgent(state_dim= com_pute.count_dim(),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
 env = RC_environment(R=2153,C=0.01,setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100',port=502)
 logger = Logger()
 
 
-episode = 100
+episode = 1000
 MAX_RUNTIME = timedelta(hours = 0, minutes = 10,seconds = 0) 
-Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/per_new'
-Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\per_new\model\test_Agent_58.pth')
+Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/per_round_3'
+#Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\per_new\model\test_Agent_58.pth')
 time.sleep(2)
 def clear_lines(n=2):
     for _ in range(n):
@@ -27,14 +27,14 @@ def clear_lines(n=2):
         sys.stdout.write('\x1b[2K')
     sys.stdout.flush()
 
-env.round_reset = 58
+
 try:
-    for ep in range(58,1000):
+    for ep in range(0,1000):
         state,per_action,Done= env.reset()
         com_pute.reset()
-        state_return = com_pute.retrun_state(action=per_action,state=state ,setpoint= env.setpoint)
+        state_return = com_pute.return_state(action=per_action, state=state, setpoint= env.setpoint)
         
-        reward = com_pute.reward_function_calurate()
+        
         if ep % 200 == 0:
             env.round_reset = 0
         done = False
@@ -52,10 +52,11 @@ try:
             
             action = Agent.select_action(state_tensor,Add_Noise=True)
             next_state, per_action, Done= env.step(action)
-            state_return_next = com_pute.retrun_state(action=per_action,state=state ,setpoint= env.setpoint)
 
+            state_return_next = com_pute.return_state(action=per_action, state=next_state, setpoint= env.setpoint)
+            reward = com_pute.return_reward()
             next_state_tensor = torch.tensor(state_return_next ,dtype= torch.float32 ,device=Agent.device)
-            reward = com_pute.reward_function_calurate()
+            
             state = next_state
 
 
@@ -82,6 +83,8 @@ try:
         
 
             step +=1
+            if step % int(1e6) == 0:
+                Agent.noise_manager.reset()
             if step % 10:
                 critic_str = f"{Critic_loss:.6f}" if Critic_loss is not None else "N/A"
                 actor_str = f"{Actor_loss:.6f}" if Actor_loss is not None else "N/A"
@@ -106,6 +109,7 @@ try:
                             data_list=[run_time,done,data_log_action, data_log_reward, data_log_state, data_log_actor_loss, data_log_critc_loss])
         logger.save_to_csv(f'data_log{ep}_.csv',folder_name=Foldor+r'/data_log')
         logger.clear_data()
+        time.sleep(1)
 
 except KeyboardInterrupt:
      print("keyborad interrup")
