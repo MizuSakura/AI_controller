@@ -10,15 +10,15 @@ import time
 
 com_pute = ComputeState(c_retroactive_action=5,c_retroactive_error=5,c_retroactive_setpoint=5)
 print(com_pute.count_dim())
-Agent = DDPGAgent(state_dim= com_pute.count_dim(),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou_decay')
+Agent = DDPGAgent(state_dim= com_pute.count_dim(),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='ou')
 env = RC_environment(R=2153,C=0.01,setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100',port=502)
 logger = Logger()
 
 
 episode = 1000
-MAX_RUNTIME = timedelta(hours = 0, minutes = 10,seconds = 0) 
-Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/per_round_3'
+MAX_RUNTIME = timedelta(hours = 0, minutes = 5,seconds = 0) 
+Foldor = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log/per_round_5'
 #Agent.load_model(r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\per_new\model\test_Agent_58.pth')
 time.sleep(2)
 def clear_lines(n=2):
@@ -83,7 +83,7 @@ try:
         
 
             step +=1
-            if step % int(1e6) == 0:
+            if step % int(1e7) == 0:
                 Agent.noise_manager.reset()
             if step % 10:
                 critic_str = f"{Critic_loss:.6f}" if Critic_loss is not None else "N/A"
@@ -91,9 +91,10 @@ try:
                 
                 line1 = f'\rEpisode: {ep}| Action: {action:.3f}| Reward: {reward:.3}| Done: {Done}| state: {state:.3f}'
                 line2 = f'Actor_loss: {actor_str} | Critic_loss: {critic_str}'
+                line3 = f'stack: {com_pute.stack}'
 
                 clear_lines(5)
-                sys.stdout.write(f'{line1}\n{line2}\n')
+                sys.stdout.write(f'{line1}\n{line2}\n{line3}\n')
                 sys.stdout.flush()
 
             

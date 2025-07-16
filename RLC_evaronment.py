@@ -66,14 +66,19 @@ class ComputeState:
         self.state_memory = deque([0.0] * c_retroactive_state, maxlen=c_retroactive_state)
         self.setpoint_memory = deque([0.0] * c_retroactive_setpoint, maxlen=c_retroactive_setpoint)
 
-        self.span_action = 10
+        #--------------- config parameter -----------#
+        
         self.max_action_scale = 1
         self.min_action_scale = -1
+
         self.max_error_scale = 2
         self.min_error_scale = 0
+
         self.parameter_reward_action = 0.33
+
         self.max_state = 10
         self.min_state = 0
+        self.stack = 0
 
         self.init_status = False
 
@@ -119,40 +124,26 @@ class ComputeState:
         reward = reward/len(actions)
         
         return reward
-
-        
-
-    def reward_function_error(self):
-        error = list(self.error_memory)
-        sp = list(self.setpoint_memory)
-        stack_reward = 0
-        delta = 0
-        stack = 0
-        for i in range(1,len(error)):
-            parameter  = self.Auto_parameter_setpoint(sp=sp[i])
-            delta = abs(error[i]) - abs(error[i-1])
-            if delta < 0 :
-                stack_reward += (self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(error[i])) + self.min_error_scale
-
-            else:
-                stack_reward+= -( abs((self.max_error_scale - self.min_error_scale) * np.exp(-parameter * abs(error[i])) + self.min_error_scale)) * stack
-                stack +=1
-        
-        return stack_reward/ len(self.error_memory),stack
     
     def reward_function_error(self):
         error = list(self.error_memory)
         sp = list(self.setpoint_memory)
 
         stack_reward = 0
+        stack_penalize = 0
         for i in range(1,len(error)):
             parameter  = self.Auto_parameter_setpoint(sp=sp[i])
             delta = abs(error[i]) - abs(error[i - 1])
             if delta < 0:
-                pass
+                stack_reward += np.exp(-parameter * abs(error[i]))
                 
             else:
-                pass
+                stack_penalize +=1
+                stack_reward += -(1 - np.exp( -parameter * abs(error[i])))  * stack_penalize
+        
+        return stack_reward / len(error),stack_penalize
+
+       
 
     def Auto_parameter_setpoint(self,sp):
         parameter = sp / (0.3 * sp**2)
@@ -166,12 +157,13 @@ class ComputeState:
     
     def return_reward(self):
        
-        reward_error,stack = self.reward_function_error() 
+        reward_error,stack_penalize = self.reward_function_error() 
         reward_action = self.reward_funtion_action()
-        if stack > 1:
-            reward = -abs(reward_action + reward_error)
-        else:
-            reward = reward_action + reward_error
-
+        if stack_penalize > 1 :
+            reward_action = -abs(reward_action)
+            reward_error =  -abs(reward_error)
+        reward = reward_error + reward_action
+        
+        self.stack = stack_penalize
         return reward
         
