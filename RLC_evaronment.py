@@ -23,7 +23,7 @@ class RC_environment:
 
     def reset(self):
         min_diff = 0.5 
-        round = 5
+        round = 1
         spread = (self.round_reset / 100) * self.maximumn_volt
 
         block = (self.round_reset // round)  
@@ -79,6 +79,7 @@ class ComputeState:
         self.max_state = 10
         self.min_state = 0
         self.stack = 0
+        self.stack_penalize = 0
 
         self.init_status = False
 
@@ -118,10 +119,11 @@ class ComputeState:
     def reward_funtion_action(self):
         actions = list(self.action_memory)
         reward = 0
+        delta = 0
         for i in range(1,len(actions)):
-            delta = abs(actions[i] - actions[i -1])
-            reward += (self.max_action_scale - self.min_action_scale) * np.exp(-self.parameter_reward_action * (delta)) + self.min_action_scale
-        reward = reward/len(actions)
+            delta += abs(actions[i] - actions[i -1])
+        reward += (self.max_action_scale - self.min_action_scale) * np.exp(-self.parameter_reward_action * (delta)) + self.min_action_scale
+        
         
         return reward
     
@@ -130,18 +132,30 @@ class ComputeState:
         sp = list(self.setpoint_memory)
 
         stack_reward = 0
-        stack_penalize = 0
+        
+        delta = 0
         for i in range(1,len(error)):
             parameter  = self.Auto_parameter_setpoint(sp=sp[i])
-            delta = abs(error[i]) - abs(error[i - 1])
-            if delta < 0:
-                stack_reward += np.exp(-parameter * abs(error[i]))
-                
+            delta += abs(error[i]) - abs(error[i - 1])
+        if delta < 0 :
+            
+            stack_reward += np.exp(-parameter * abs(error[i])) * abs(self.stack_penalize)
+            if self.stack_penalize < -10:
+                self.stack_penalize = self.stack_penalize
             else:
-                stack_penalize +=1
-                stack_reward += -(1 - np.exp( -parameter * abs(error[i])))  * stack_penalize
-        
-        return stack_reward / len(error),stack_penalize
+                self.stack_penalize -= 1
+            
+            
+            
+        else:
+            
+            stack_reward += -(1 - np.exp( -parameter * abs(error[i])))  * self.stack_penalize
+            if self.stack_penalize > 10:
+                self.stack_penalize = self.stack_penalize
+            else:
+                self.stack_penalize +=1
+    
+        return stack_reward , self.stack_penalize
 
        
 
@@ -159,9 +173,11 @@ class ComputeState:
        
         reward_error,stack_penalize = self.reward_function_error() 
         reward_action = self.reward_funtion_action()
-        if stack_penalize > 1 :
-            reward_action = -abs(reward_action)
-            reward_error =  -abs(reward_error)
+
+        if self.stack_penalize > 1:
+            reward_error = -abs(reward_error)
+            reward_action = - abs(reward_action)
+
         reward = reward_error + reward_action
         
         self.stack = stack_penalize
