@@ -96,3 +96,29 @@ class Logger:
                 print("File not found. Please check the file path and file name.")
         else:
             raise ValueError("CSV file not found. Please check the file extension ")
+    
+    def append_from_csv_folder(self, folder_path):
+        folder = Path(folder_path)
+        if not folder.exists() or not folder.is_dir():
+            print(f"Invalid folder: {folder}")
+            return
+
+        csv_files = list(folder.glob("*.csv"))
+        if not csv_files:
+            print("No CSV files found in the folder.")
+            return
+
+        combined_df = pd.DataFrame()
+        for file in csv_files:
+            try:
+                temp_df = pd.read_csv(file)
+                combined_df = pd.concat([combined_df, temp_df], ignore_index=True)
+            except Exception as e:
+                print(f"Error loading {file.name}: {e}")
+
+        if self.df.empty:
+            self.df = combined_df
+        else:
+            self.df = pd.concat([self.df, combined_df], ignore_index=True)
+
+        print(f"Appended {len(csv_files)} files from {folder_path}")
