@@ -192,6 +192,9 @@ class PER_replay_buffer():
             priority = self._get_priority(error)
             self.buffer.update(idx, priority)
 
+    def __len__(self):
+        return self.buffer.current_size
+
         
 class ReplayBufferManager:
     def __init__(self, buffer_type: str, **kwargs):
@@ -219,4 +222,9 @@ class ReplayBufferManager:
             return self.buffer.Store(*args)
             
     def sample(self):
+        if len(self.buffer) < self.buffer.batch_size:
+            return None
         return self.buffer.Sample()
+    
+    def __len__(self):
+        return len(self.buffer)
