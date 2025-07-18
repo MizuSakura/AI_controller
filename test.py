@@ -14,7 +14,7 @@ class ComputeState:
         self.max_action_scale = 1
         self.min_action_scale = -1
 
-        self.max_error_scale = 1
+        self.max_error_scale = 2
         self.min_error_scale = 0
 
         self.parameter_action = 0.15
@@ -98,9 +98,9 @@ setpoint = 5.0
 state = 0.0
 
 # จำลองการกระทำที่เปลี่ยนแปลงจาก smooth ไป chaotic
-for t in range(50):
+for t in range(10):
     # สร้าง action แบบมี noise เพิ่มขึ้นเรื่อยๆ
-    action = np.sin(t * 0.2) + np.random.normal(scale=t * 0.01)
+    action = np.random.uniform(0,0.1)+t
     state += action * 0.1  # สมมุติว่ามีผลกับ state
     reward_state = cs.return_state(action=action, state=state, setpoint=setpoint)
     reward = cs.reward_function_calculate()

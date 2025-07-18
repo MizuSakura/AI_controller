@@ -219,4 +219,7 @@ class ReplayBufferManager:
             return self.buffer.Store(*args)
             
     def sample(self):
+        if len(self.buffer) < getattr(self.buffer, 'batch_size', 1):
+            return None
         return self.buffer.Sample()
+

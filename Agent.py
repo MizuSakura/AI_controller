@@ -54,9 +54,12 @@ class DDPGAgent:
         else:
             state = state.detach().clone().to(self.device).unsqueeze(0)
 
-        action = self.actor(state).cpu().data.numpy().flatten()
-        if Add_Noise:
-            action += self.noise_manager.sample(state=state)
+        if Add_Noise and self.noise_manager.noise_type == 'parameter':
+            action += self.noise_manager.sample(state=state).cpu().data.numpy().flatten()
+        else:
+            action = self.actor(state).cpu().data.numpy().flatten()
+            if Add_Noise:
+                action += self.noise_manager.sample()
 
         action = self.rescale_action(action, self.min_action, self.max_action)
         action = np.clip(action, self.min_action, self.max_action)
