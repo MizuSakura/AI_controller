@@ -53,6 +53,8 @@ class DDPGAgent:
             state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         else:
             state = state.detach().clone().to(self.device).unsqueeze(0)
+        
+        action = self.actor(state).cpu().data.numpy().flatten()
 
         if Add_Noise and self.noise_manager.noise_type == 'parameter':
             action += self.noise_manager.sample(state=state).cpu().data.numpy().flatten()
