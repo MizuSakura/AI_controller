@@ -42,7 +42,7 @@ class DDPGAgent:
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-3)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3)
 
-        self.replay_buffer = ReplayBufferManager(replay_buffer)
+        self.replay_buffer = ReplayBufferManager(replay_buffer,batch_size =256)
         self.noise_manager = NoiseManager(Noise_type, action_dim=action_dim, actor_model=self.actor)
 
         self.gamma = 0.99
@@ -54,9 +54,12 @@ class DDPGAgent:
         else:
             state = state.detach().clone().to(self.device).unsqueeze(0)
 
-        action = self.actor(state).cpu().data.numpy().flatten()
-        if Add_Noise:
-            action += self.noise_manager.sample(state=state)
+        if Add_Noise and self.noise_manager.noise_type == 'parameter':
+            action += self.noise_manager.sample(state=state).cpu().data.numpy().flatten()
+        else:
+            action = self.actor(state).cpu().data.numpy().flatten()
+            if Add_Noise:
+                action += self.noise_manager.sample()
 
         action = self.rescale_action(action, self.min_action, self.max_action)
         action = np.clip(action, self.min_action, self.max_action)
