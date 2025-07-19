@@ -98,6 +98,7 @@ class Logger:
             raise ValueError("CSV file not found. Please check the file extension ")
     
     def append_from_csv_folder(self, folder_path):
+
         folder = Path(folder_path)
         if not folder.exists() or not folder.is_dir():
             print(f"Invalid folder: {folder}")
@@ -122,3 +123,19 @@ class Logger:
             self.df = pd.concat([self.df, combined_df], ignore_index=True)
 
         print(f"Appended {len(csv_files)} files from {folder_path}")
+
+    def check_column_condition(self, column_name =None, traget_value = True,min_count=0,start=None,end=None):
+
+        if self.df.empty:
+            print("No data available to check.")
+
+        if column_name not in self.df.columns:
+            print(f"Column '{column_name}' not found.")
+
+        data_slice = self.df[column_name]
+        if start is not None or end is not None:
+            data_slice = data_slice[start:end]
+        
+        count = (data_slice == traget_value).sum()
+
+        return count >= min_count
