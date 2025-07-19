@@ -21,21 +21,25 @@ class RC_environment:
 
         self.reset()
 
-    def reset(self):
-        min_diff = 0.5 
-        round = 1
-        spread = (self.round_reset / 100) * self.maximumn_volt
+    def reset(self,control=None):
+        if control is None:
+            min_diff = 0.5 
+            round = 1
+            spread = (self.round_reset / 100) * self.maximumn_volt
 
-        block = (self.round_reset // round)  
+            block = (self.round_reset // round)  
 
-        if block % 2 == 0:
-            low = max(0, self.setpoint - spread)
-            high = self.setpoint - min_diff
+            if block % 2 == 0:
+                low = max(0, self.setpoint - spread)
+                high = self.setpoint - min_diff
+            else:
+                low = self.setpoint + min_diff
+                high = min(self.maximumn_volt, self.setpoint + spread)
+
+            self.voltage_capacitor = np.random.uniform(low=low, high=high)
         else:
-            low = self.setpoint + min_diff
-            high = min(self.maximumn_volt, self.setpoint + spread)
-
-        self.voltage_capacitor = np.random.uniform(low=low, high=high)
+            self.voltage_capacitor = control
+            
         self.per_error = self.setpoint - self.voltage_capacitor
         self.round_reset += 1
         self.time = 0.0
