@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, timedelta
 import time
 
-com_pute = ComputeState(c_retroactive_action=5,c_retroactive_error=5,c_retroactive_setpoint=5)
+com_pute = ComputeState()
 print(com_pute.count_dim())
 Agent = DDPGAgent(state_dim= com_pute.count_dim(),action_dim=1,min_action=0,max_action=10,replay_buffer='per',Noise_type='parameter')
 env = RC_environment(R=2153,C=0.01,setpoint=5)
