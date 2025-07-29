@@ -33,8 +33,8 @@ class DDPGAgent:
         self.max_action = max_action
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.actor = Actor(state_dim, action_dim, max_action, hidden_size=128).to(self.device)
-        self.critic = Critic(state_dim, action_dim, hidden_size=128).to(self.device)
+        self.actor = Actor(state_dim, action_dim, max_action, hidden_size=256).to(self.device)
+        self.critic = Critic(state_dim, action_dim, hidden_size=256).to(self.device)
 
         self.target_actor = deepcopy(self.actor).to(self.device)
         self.target_critic = deepcopy(self.critic).to(self.device)
@@ -49,23 +49,24 @@ class DDPGAgent:
         self.current_path = Path(os.getcwd())
 
     def select_action(self, state, Add_Noise=True):
-        if not isinstance(state, torch.Tensor):
-            state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-        else:
-            state = state.detach().clone().to(self.device).unsqueeze(0)
-        
-        action = self.actor(state).cpu().data.numpy().flatten()
-
-        if Add_Noise and self.noise_manager.noise_type == 'parameter':
-            action += self.noise_manager.sample(state=state).cpu().data.numpy().flatten()
-        else:
+        with torch.no_grad():
+            if not isinstance(state, torch.Tensor):
+                state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+            else:
+                state = state.detach().clone().to(self.device).unsqueeze(0)
+            
             action = self.actor(state).cpu().data.numpy().flatten()
-            if Add_Noise:
-                action += self.noise_manager.sample()
 
-        action = self.rescale_action(action, self.min_action, self.max_action)
-        action = np.clip(action, self.min_action, self.max_action)
-        return action.item()
+            if Add_Noise and self.noise_manager.noise_type == 'parameter':
+                action += self.noise_manager.sample(state=state).cpu().data.numpy().flatten()
+            else:
+                action = self.actor(state).cpu().data.numpy().flatten()
+                if Add_Noise:
+                    action += self.noise_manager.sample()
+
+            action = self.rescale_action(action, self.min_action, self.max_action)
+            
+            return np.clip(action, self.min_action, self.max_action).item()
 
     def rescale_action(self,raw_action,min_action,max_action):
         raw_ar_action = np.array(raw_action)
@@ -81,38 +82,45 @@ class DDPGAgent:
 
         if self.replay_buffer.buffer_type == 'vanilla' or self.replay_buffer.buffer_type == 'n_step':
             state, action, reward, next_state, done = sample
+            is_weight, indexes = None, None
         elif self.replay_buffer.buffer_type == 'per':
             state, action, reward, next_state, done, is_weight, indexes = sample
-       
-       
+
         with torch.no_grad():
-            next_action = self.target_actor(next_state)
-            target_q = self.target_critic(next_state, next_action)
-            target_q = reward + self.gamma * (1 - done)  * target_q
-            
+            next_action = self.target_actor.act(next_state)
+            target_q = self.target_critic.evaluate(next_state, next_action)
+            target_q = reward + self.gamma * (1 - done) * target_q
+
         current_q = self.critic(state, action)
         td_error = target_q - current_q
-        critic_loss = (is_weight * td_error ** 2).mean() if self.replay_buffer.buffer_type == 'per' else td_error.pow(2).mean()
+
+        if is_weight is not None:
+            critic_loss = (is_weight * td_error.pow(2)).mean()
+        else:
+            critic_loss = td_error.pow(2).mean()
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
 
         policy_action = self.actor(state)
-        actor_loss = (-self.critic(state, policy_action)).mean()
-        actor_loss = (is_weight * actor_loss).mean() if self.replay_buffer.buffer_type == 'per' else actor_loss
+        actor_loss = -self.critic(state, policy_action).mean()
+
+        if is_weight is not None:
+            actor_loss = (is_weight * actor_loss).mean()
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
-        if self.replay_buffer.buffer_type == 'per':
+        if indexes is not None:
             self.replay_buffer.buffer.update_priorities(indexes, td_error.detach().cpu().numpy())
 
         self.soft_update(self.critic, self.target_critic)
         self.soft_update(self.actor, self.target_actor)
-        
+
         return actor_loss.item(), critic_loss.item()
+
 
 
     def soft_update(self, net, net_target, tau=0.005):
@@ -128,12 +136,13 @@ class DDPGAgent:
             if len(next_state.shape) == 1:
                 next_state = next_state.unsqueeze(0)
 
-            next_action = self.target_actor(next_state)
-            target_q = self.target_critic(next_state, next_action)
+            next_action = self.target_actor.act(next_state)
+            target_q = self.target_critic.evaluate(next_state, next_action)
             target_q = reward + self.gamma * (1 - done) * target_q
             current_q = self.critic(state, action)
-            td_error = (target_q - current_q).cpu().numpy().flatten()[0]
+            td_error = (target_q - current_q).cpu().item()
             return td_error
+
 
     def save_model(self, file_name ='Agent.pth', folder_name=None,path_name = None):
         pass

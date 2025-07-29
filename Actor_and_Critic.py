@@ -18,6 +18,11 @@ class Actor(nn.Module):
     def forward(self, state):
         return self.net(state) 
     
+    @torch.no_grad()
+    def act(self, state):
+        """Use this for fast inference without gradient tracking"""
+        return self.forward(state)
+    
 class Critic(nn.Module):
     def __init__(self, state_dim=1, action_dim=1, hidden_size=128):
         super(Critic, self).__init__()
@@ -34,4 +39,9 @@ class Critic(nn.Module):
         action = action.view(-1, self.action_dim)
         x = torch.cat([state, action], dim=1)
         return self.net(x)
+    
+    @torch.no_grad()
+    def evaluate(self, state, action):
+        """Use this for fast critic evaluation without gradient tracking"""
+        return self.forward(state, action)
     
