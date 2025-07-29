@@ -24,7 +24,7 @@ class RC_environment:
     def reset(self,control=None):
         if control is None:
             min_diff = 0.5 
-            round = 1
+            round = 10
             spread = (self.round_reset / 100) * self.maximumn_volt
 
             block = (self.round_reset // round)  

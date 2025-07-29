@@ -27,7 +27,7 @@ class compute_process:
         self.error = deque([0.0] * self.error_frame, maxlen= self.error_frame)
         self.reward = deque([0.0] * self.reward_frame, maxlen= self.reward_frame)
         self.action = deque([0.0] * self.action_frame, maxlen= self.action_frame)
-        self.delta_error = deque(maxlen= 3)
+        self.delta_error = deque(maxlen= 10)
 
         # parameter of static such as  mean,standard-deviation,deviation
         self.ema_alpha_state = 0.5 #--> sentivity EMA 
@@ -45,6 +45,8 @@ class compute_process:
         self.ema_alpla_delta_error = 0.5
         self.ema_mean_delta_error = 0
         self.ema_std_delta_error = 1e-10
+
+        self.delta_penalty_counter = 0
 
 
     def _init_memory_state(self,state):
@@ -235,29 +237,42 @@ class compute_process:
         
         return rescaled_reward
     
-    def reward_funtion_delta_error(self,reward_range=(-0.3, 1.0),tolerance_delta:float=1e-10,tolerance_error=0.1):
+    def reward_funtion_delta_error(self, reward_range=(-0.3, 1.0), tolerance_delta: float = 1e-10, tolerance_error=0.1):
         delta = np.sum(np.diff(np.abs(self.error)))
         self.delta_error.append(delta)
-        last_error = self.error[-1]
 
+        self.update_ema_delta_error(delta)
+
+        z_score = self.z_score_mromalization(
+            value=delta,
+            mean=self.ema_mean_delta_error,
+            deviation=self.ema_std_delta_error + 1e-8
+        )
+
+        score = -z_score
+        scaled = np.tanh(score)
+
+        if z_score > 0:
+            self.delta_penalty_counter += 1
+        else:
+            self.delta_penalty_counter = 0
+
+        penalty_multiplier = np.exp(0.1 * self.delta_penalty_counter)
+        scaled /= penalty_multiplier
+
+        last_error = abs(self.error[-1])
         if last_error <= tolerance_error:
             return reward_range[1]
-        
+
         if np.mean(self.delta_error) <= tolerance_delta:
             return reward_range[0]
-        
-
-        parameter = 3.33
-        raw_min = np.exp(0)
-        raw_max = np.exp(parameter)
-
-        invert_delta_error = -delta
-        raw_reward = np.exp(parameter * (invert_delta_error))
 
         min_val, max_val = reward_range
-        rescaled_reward = min_val + (max_val - min_val) * ((raw_reward - raw_min) / (raw_max - raw_min))
+        rescaled_reward = min_val + (max_val - min_val) * ((scaled + 1) / 2)
 
         return rescaled_reward
+
+
     
     def reward_function_action(self, reward_range=(-0.3, 1.0), smooth_threshold=0.1):
         # 1. ตรวจสอบข้อมูล action
