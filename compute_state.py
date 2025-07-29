@@ -4,12 +4,11 @@ import matplotlib.pyplot as plt
 
 
 class compute_process:
-    def __init__(self, state_frame=3, error_frame=3, reward_frame=3, action_frame=3,max_data=1e5):
+    def __init__(self, state_frame=3, error_frame=3, reward_frame=3, action_frame=3):
         self.state_frame = state_frame
         self.error_frame = error_frame
         self.reward_frame = reward_frame
         self.action_frame = action_frame
-        self.max_data = int(max_data)
 
         self.state = deque([0.0] * self.state_frame, maxlen= self.state_frame)
         self.error = deque([0.0] * self.error_frame, maxlen= self.error_frame)
@@ -44,22 +43,31 @@ class compute_process:
     def _init_memory_action(self,action):
         self.action = deque([action] * self.action_frame, maxlen= self.action_frame)
 
-    def add_data_manager(self,name,**kwage):
-        name = name.lower()
-        if name == 'state':
-            self.state.append(kwage.get('state',None))
-        elif name == 'error':
-            setpoint = kwage.get('setpoint',None)
-            state = kwage.get('state',None)
-            if setpoint is not None and state is not None:
-                error = setpoint - state
+    def add_data_manager(self, **kwargs):
+  
+        # example  add_data_manager(state=1.2, setpoint=2.0, reward=0.5, action=0.3)
+
+        supported_keys = ['state', 'setpoint', 'reward', 'action']
+
+        for key in kwargs:
+            if key not in supported_keys:
+                print(f"[Warning] Unsupported key: '{key}' will be ignored.")
+
+        if 'state' in kwargs and kwargs['state'] is not None:
+            self.state.append(kwargs['state'])
+
+        if 'state' in kwargs and 'setpoint' in kwargs:
+            if kwargs['state'] is not None and kwargs['setpoint'] is not None:
+                error = kwargs['setpoint'] - kwargs['state']
                 self.error.append(error)
-        elif name == 'reward':
-            self.reward.append(kwage.get('reward',None))
-        elif name == 'action':
-            self.action.append(kwage.get('action',None))
-        else:
-            print("the name dose not match the information")
+            else:
+                print("[Warning] Cannot compute error: 'state' or 'setpoint' is None")
+
+        if 'reward' in kwargs and kwargs['reward'] is not None:
+            self.reward.append(kwargs['reward'])
+
+        if 'action' in kwargs and kwargs['action'] is not None:
+            self.action.append(kwargs['action'])
 
 
     def return_state_manager(self,name:str=None):
@@ -73,24 +81,65 @@ class compute_process:
         elif name == 'action':
             return list(self.action)
         else:
-            print("the name dose not match the information")
+            print("the name does not match the information")
 
-    def __len__(self,name:str):
+    def return_normalized_manager(self, name: str = None):
         name = name.lower()
+        eps = 1e-10
+
         if name == 'state':
-            return len(self.state)
+            values = np.array(self.state)
+            norm = (np.tanh((values - self.ema_mean_state) / (self.ema_std_state + eps)) + 1) / 2
+            return norm.tolist()
+
         elif name == 'error':
-            return len(self.error)
-        elif name == 'reward':
-            return len(self.reward )
+            values = np.array(self.error)
+            norm = (np.tanh((values - self.ema_mean_error) / (self.ema_std_error + eps)) + 1) / 2
+            return norm.tolist()
+
         elif name == 'action':
-            return len(self.action)
+            values = np.array(self.action)
+            norm = (np.tanh((values - self.ema_mean_action) / (self.ema_std_action + eps)) + 1) / 2
+            return norm.tolist()
+
         else:
-            print("the name dose not match the information")
+            raise ValueError("Name must be one of ['state', 'error', 'action']")
 
-    def reward_manager(self,name:str=None):
-        pass
+    def return_all_normalized(self):
+        return self.return_normalized_manager('state') + self.return_normalized_manager('error') + self.return_normalized_manager('action')
 
+    def __len__(self, name: str = None):
+        if name is None:
+            return (len(self.state) + len(self.error) + len(self.action))
+
+        name = name.lower()
+        names = [n.strip() for n in name.split(',')]
+        total = 0
+
+        for n in names:
+            if n == 'state':
+                total += len(self.state)
+            elif n == 'error':
+                total += len(self.error)
+            elif n == 'reward':
+                total += len(self.reward)
+            elif n == 'action':
+                total += len(self.action)
+            else:
+                print(f"Unknown name: {n}")
+                print("Please specify one or more names: 'state', 'error', 'reward', 'action'")
+        return total
+    
+    def reward_manager(self,name):
+        name_type = name
+        if name_type == 'state':
+            return self.reward_state()
+        elif name_type == 'error':
+            return self.reward_error()
+        elif name_type == 'action':
+            return self.reward_action()
+        else:
+            raise ValueError(f"Unknown reward name: {name}")
 
     def reward_state(self,reward_range=(0, 1.0)):
         mean_error = np.mean(self.error)
@@ -181,7 +230,6 @@ class compute_process:
         self.ema_mean_state += self.ema_alpha_state * diff
         self.ema_std_state += self.ema_alpha_state * (abs(diff) - self.ema_std_state)
 
-    
 class TanhNormalizerEMA:
     def __init__(self, alpha=0.01, eps=1e-8):
         self.alpha = alpha
@@ -216,30 +264,30 @@ class TanhNormalizerEMA:
 
 
 # --- Define different error trends for testing ---
-data = []
-for i in range(0,100):
-    data.append(np.random.uniform(0,1))
-    print(i)
+# data = []
+# for i in range(0,100):
+#     data.append(np.random.uniform(0,1))
+#     print(i)
 
-data_plot = []
-time = []
-cp = compute_process(error_frame=10)
-for i in range(1,len(data)):
-    cp.error.append(data[i])
-    reward = cp.reward_error()
-    data_plot.append(reward)
-    time.append(i)
+# data_plot = []
+# time = []
+# cp = compute_process(error_frame=10)
+# for i in range(1,len(data)):
+#     cp.error.append(data[i])
+#     reward = cp.reward_error()
+#     data_plot.append(reward)
+#     time.append(i)
 
-plt.figure(figsize=(12, 6))
-plt.bar(time, data_plot, color='mediumseagreen')
-plt.plot(data,'o-')
-plt.title("Reward Over Time from Sliding Error Window", fontsize=16)
-plt.xlabel("Time Step", fontsize=14)
-plt.ylabel("Reward", fontsize=14)
-plt.ylim(0, 1.1)
-plt.grid(axis='y', linestyle='--', alpha=0.5)
-plt.tight_layout()
-plt.show()
+# plt.figure(figsize=(12, 6))
+# plt.bar(time, data_plot, color='mediumseagreen')
+# plt.plot(data,'o-')
+# plt.title("Reward Over Time from Sliding Error Window", fontsize=16)
+# plt.xlabel("Time Step", fontsize=14)
+# plt.ylabel("Reward", fontsize=14)
+# plt.ylim(0, 1.1)
+# plt.grid(axis='y', linestyle='--', alpha=0.5)
+# plt.tight_layout()
+# plt.show()
 
 # # --- Simulate longer error trends (50 steps) ---
 # length = 100
