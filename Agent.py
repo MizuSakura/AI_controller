@@ -170,6 +170,6 @@ class DDPGAgent:
                 self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
                 print(f"Model loaded successfully from {path_file}")
             except Exception as e:
-                print("File not found. Please check the file path and file name.")
+                print(f"File not found. Please check the file path and file name. {e}")
         else:
             raise ValueError("pth file not found. Please check the file extension ")
