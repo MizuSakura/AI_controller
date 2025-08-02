@@ -6,7 +6,7 @@ import torch
 
 
 class compute_process:
-    def __init__(self, state_frame=3, error_frame=3, reward_frame=3, action_frame=3,
+    def __init__(self, state_frame=10, error_frame=10, reward_frame=10, action_frame=10,
                  max_state=10,min_state= 0,user_normalization=True):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.state_frame = state_frame
@@ -27,7 +27,7 @@ class compute_process:
         self.error = deque([0.0] * self.error_frame, maxlen= self.error_frame)
         self.reward = deque([0.0] * self.reward_frame, maxlen= self.reward_frame)
         self.action = deque([0.0] * self.action_frame, maxlen= self.action_frame)
-        self.delta_error = deque(maxlen= 10)
+        self.delta_error = deque(maxlen= 3)
 
         # parameter of static such as  mean,standard-deviation,deviation
         self.ema_alpha_state = 0.5 #--> sentivity EMA 
@@ -42,7 +42,7 @@ class compute_process:
         self.ema_mean_action = 0.0
         self.ema_std_action = 1e-10
 
-        self.ema_alpla_delta_error = 0.5
+        self.ema_alpha_delta_error = 0.5
         self.ema_mean_delta_error = 0
         self.ema_std_delta_error = 1e-10
 
@@ -79,8 +79,8 @@ class compute_process:
 
     def update_ema_delta_error(self,new_delta):
         diff = new_delta - self.ema_mean_delta_error
-        self.ema_mean_delta_error += self.ema_alpla_delta_error * diff
-        self.ema_std_delta_error += self.ema_alpla_delta_error * (abs(diff) - self.ema_std_delta_error)
+        self.ema_mean_delta_error += self.ema_alpha_delta_error * diff
+        self.ema_std_delta_error += self.ema_alpha_delta_error * (abs(diff) - self.ema_std_delta_error)
 
     def max_min_normalization(self, value, max, min):
         
@@ -237,71 +237,82 @@ class compute_process:
         
         return rescaled_reward
     
-    def reward_funtion_delta_error(self, reward_range=(-0.3, 1.0), tolerance_delta: float = 1e-10, tolerance_error=0.1):
-        delta = np.sum(np.diff(np.abs(self.error)))
+    def reward_funtion_delta_error(self, reward_range=(-0.1, 1.0), 
+                                    tolerance_delta: float = 1e-4, 
+                                    tolerance_error=0.05,
+                                    stagnation_penalty=-0.3,
+                                    improvement_bonus=0.5):
+        error_array = np.array(self.error)
+        delta_array = np.diff(np.abs(error_array))
+        delta = np.sum(delta_array)
         self.delta_error.append(delta)
 
         self.update_ema_delta_error(delta)
 
+        # Trend detection (เช็คว่า error ลดลงต่อเนื่องไหม)
+        trend = np.polyfit(np.arange(len(error_array)), error_array, 1)[0]  # slope
+
+        # กรณี converge
+        if abs(self.error[-1]) < tolerance_error and delta < tolerance_delta:
+            return reward_range[1] + improvement_bonus  # รางวัลพิเศษ
+
+        # กรณี error แกว่งน้อยเกินไป → อาจแปลว่านิ่งแต่ไม่ converge
+        if np.mean(self.delta_error) < tolerance_delta:
+            self.delta_penalty_counter -= 0.1
+            return -(abs(self.delta_penalty_counter) + abs(stagnation_penalty))
+
+        # คำนวณ reward base ด้วย tanh ตามเดิม
         z_score = self.z_score_mromalization(
             value=delta,
             mean=self.ema_mean_delta_error,
             deviation=self.ema_std_delta_error + 1e-8
         )
+        score = -np.tanh(z_score)  # ยิ่ง delta มาก → ยิ่งน้อยลง
+        reward = reward_range[0] + (reward_range[1] - reward_range[0]) * ((score + 1) / 2)
 
-        score = -z_score
-        scaled = np.tanh(score)
+        # เพิ่มหรือลดตาม trend
+        if trend < 0:
+            self.delta_penalty_counter += 0.1
+            reward += 0.1 +  self.delta_penalty_counter 
+        elif trend > 0:
+            self.delta_penalty_counter -= 0.1
+            reward +=  self.delta_penalty_counter
 
-        if z_score > 0:
-            self.delta_penalty_counter += 1
-        else:
-            self.delta_penalty_counter = 0
+        self.delta_penalty_counter  =   np.clip( self.delta_penalty_counter,-1,1)
 
-        penalty_multiplier = np.exp(0.1 * self.delta_penalty_counter)
-        scaled /= penalty_multiplier
-
-        last_error = abs(self.error[-1])
-        if last_error <= tolerance_error:
-            return reward_range[1]
-
-        if np.mean(self.delta_error) <= tolerance_delta:
-            return reward_range[0]
-
-        min_val, max_val = reward_range
-        rescaled_reward = min_val + (max_val - min_val) * ((scaled + 1) / 2)
-
-        return rescaled_reward
+        return np.clip(reward, reward_range[0], reward_range[1])
 
 
-    
-    def reward_function_action(self, reward_range=(-0.3, 1.0), smooth_threshold=0.1):
-        # 1. ตรวจสอบข้อมูล action
-        if len(self.action) < 2:
+    def reward_function_action(self, reward_range=(-0.3, 1.0), 
+                            smooth_threshold=0.1,
+                            impact_weight=0.5,
+                            overreact_penalty=-0.2):
+        if len(self.action) < 2 or len(self.error) < 2:
             return 0.0
 
-        # 2. วัดความเปลี่ยนแปลงของ action
         diffs = np.abs(np.diff(self.action))
         max_diff = np.max(diffs)
 
-        # 3. ถ้าเปลี่ยนแปลงน้อย → ให้ reward เต็ม
+        # smooth reward
         if max_diff <= smooth_threshold:
-            return reward_range[1]  # Full reward = 1.0
+            smooth_reward = reward_range[1]
+        else:
+            delta = np.sum(diffs)
+            raw_reward = np.exp(-2.5 * delta)
+            smooth_reward = reward_range[0] + (reward_range[1] - reward_range[0]) * raw_reward
 
-        # 4. ถ้าเปลี่ยนมาก → ลงโทษโดยใช้ Exponential
-        delta = abs(np.sum(np.diff(self.action)))
+        # impact reward: ถ้า action เปลี่ยน → error ควรลด
+        delta_action = self.action[-1] - self.action[-2]
+        delta_error = self.error[-1] - self.error[-2]
 
-        parameter = 3.33
-        raw_min = np.exp(0)
-        raw_max = np.exp(parameter)
+        if np.sign(delta_action) == np.sign(-delta_error):  # หาก action ทำให้ error ลด
+            impact_reward = impact_weight
+        else:
+            impact_reward = overreact_penalty
 
-        invert_delta_action = -delta
-        raw_reward = np.exp(parameter * (invert_delta_action))
+        total_reward = smooth_reward + impact_reward
+        return np.clip(total_reward, reward_range[0], reward_range[1])
 
-       
-        min_val, max_val = reward_range
-        rescaled_reward = min_val + (max_val - min_val) * ((raw_reward - raw_min) / (raw_max - raw_min))
-
-        return rescaled_reward
     
     def return_state_manager(self,name:str=None, return_type: str = 'list'):
         name = name.lower()
@@ -335,9 +346,9 @@ class compute_process:
             return flat_array
     
     def compute_all_rewards(self):
-        rs = self.reward_funtion_state()
-        re = self.reward_funtion_delta_error()
-        ra = self.reward_function_action()
+        rs = 0.7 * self.reward_funtion_state()
+        re = 0.3 * self.reward_funtion_delta_error()
+        ra = 0.2 * self.reward_function_action()
         return rs + re + ra, rs, re, ra
     
     def reward_manager(self, name='state'):

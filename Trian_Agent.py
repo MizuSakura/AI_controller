@@ -15,30 +15,33 @@ def clear_lines(n=2):
         sys.stdout.write('\x1b[2K')
     sys.stdout.flush()
 
-compute_state = compute_process()
-dimansion = compute_state.__len__()
+compute_state = compute_process(state_frame=3, error_frame=3, reward_frame=5, action_frame=3,
+                 max_state=10,min_state= 0,user_normalization=True)
+
+dimansion = compute_state.__len__(name="state,error,action")
+print(dimansion)
 
 Agent = DDPGAgent(state_dim=dimansion, action_dim=1, min_action=0, max_action=10, replay_buffer='per', Noise_type='ou_decay')
 env = RC_environment(R=2153, C=0.01, setpoint=5)
 modbus = ModbusTCP(host='192.168.1.100', port=502)
 logger = Logger()
-
+step_max = 10000
 episode = 1000
 MAX_RUNTIME = timedelta(minutes=5)
-Folder = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\normalized'
+Folder = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\normalized4'
 
 try:
     for ep in range(episode):
+        Agent.noise_manager.reset()
         state, per_action, Done = env.reset()
         compute_state._init_memory_state(state)
         compute_state._init_memory_action(per_action)
         compute_state._init_memory_error(setpoint=env.setpoint, state=state)
         compute_state.add_data_manager(state=state, setpoint=env.setpoint, reward=0, action=per_action)
-        state_tensor = compute_state.return_state_manager(name="state,error,reward,action",return_type='tensor')
+        state_tensor = compute_state.return_state_manager(name="state,error,action",return_type='tensor')
 
         done = False
         step = 0
-        Agent.noise_manager.reset()
         run_time = []
         data_log_state, data_log_action, data_log_reward, data_log_actor_loss, data_log_critc_loss = [], [], [], [], []
         reward_state,reward_error,reward_action = [],[],[]
@@ -50,7 +53,7 @@ try:
             reward,rs,re,ra = compute_state.compute_all_rewards()
 
             compute_state.add_data_manager(state=state, setpoint=env.setpoint, reward=reward, action=per_action)
-            next_state_tensor = compute_state.return_state_manager(name="state,error,reward,action",return_type='tensor')    
+            next_state_tensor = compute_state.return_state_manager(name="state,error,action",return_type='tensor')    
 
             if Agent.replay_buffer.buffer_type == 'per':
                 td_error = Agent.compute_td_error(state_tensor, action, reward, next_state_tensor, Done)
@@ -77,13 +80,13 @@ try:
                 done = True
                 break
 
-            if (datetime.now() - start_time) >= MAX_RUNTIME:
+            if (datetime.now() - start_time) >= MAX_RUNTIME or step > step_max:
                 print('Episode Done or Timeout')
                 break
 
             step += 1
             if step % 100 == 0:
-                clear_lines(7)
+                clear_lines(15)
                 line1 = (f"Episode {ep} | Step {step} | Reward {reward:.3f} | Action {action:.3f} | state: {env.voltage_capacitor:3f}")
                 line2 = (f"Actor Loss: {Actor_loss} | Critic Loss: {Critic_loss}")
                 line3 = (f"reward state: {rs} | reward error: {re} | reward action: {ra}")

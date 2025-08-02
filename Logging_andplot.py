@@ -139,3 +139,43 @@ class Logger:
         count = (data_slice == traget_value).sum()
 
         return count >= min_count
+
+class MultiAgentLogger:
+    def __init__(self, num_agents):
+        self.num_agents = num_agents
+        # เตรียม dict เก็บข้อมูลของแต่ละ agent
+        self.logs = {
+            i: {
+                'time': [],
+                'reward': [],
+                'action': [],
+                'state': [],
+                'actor_loss': [],
+                'critic_loss': []
+            } for i in range(num_agents)
+        }
+
+    def add(self, agent_id, time_stamp, reward, action, state, actor_loss, critic_loss):
+        self.logs[agent_id]['time'].append(time_stamp)
+        self.logs[agent_id]['reward'].append(reward)
+        self.logs[agent_id]['action'].append(action)
+        self.logs[agent_id]['state'].append(state)
+        self.logs[agent_id]['actor_loss'].append(actor_loss)
+        self.logs[agent_id]['critic_loss'].append(critic_loss)
+
+    def save_to_csv(self, folder_path):
+        import pandas as pd
+        from pathlib import Path
+        folder = Path(folder_path)
+        folder.mkdir(parents=True, exist_ok=True)
+
+        for agent_id, data in self.logs.items():
+            df = pd.DataFrame(data)
+            file_path = folder / f"agent_{agent_id}_log.csv"
+            df.to_csv(file_path, index=False)
+            print(f"Saved log for Agent {agent_id} to {file_path}")
+
+    def clear(self):
+        for agent_id in range(self.num_agents):
+            for key in self.logs[agent_id]:
+                self.logs[agent_id][key] = []
