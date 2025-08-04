@@ -27,7 +27,7 @@ class compute_process:
         self.error = deque([0.0] * self.error_frame, maxlen= self.error_frame)
         self.reward = deque([0.0] * self.reward_frame, maxlen= self.reward_frame)
         self.action = deque([0.0] * self.action_frame, maxlen= self.action_frame)
-        self.delta_error = deque(maxlen= 3)
+        self.delta_memory = deque(maxlen=3)
 
         # parameter of static such as  mean,standard-deviation,deviation
         self.ema_alpha_state = 0.5 #--> sentivity EMA 
@@ -42,11 +42,12 @@ class compute_process:
         self.ema_mean_action = 0.0
         self.ema_std_action = 1e-10
 
-        self.ema_alpha_delta_error = 0.5
-        self.ema_mean_delta_error = 0
-        self.ema_std_delta_error = 1e-10
+        # self.ema_alpha_delta_error = 0.5
+        # self.ema_mean_delta_error = 0
+        # self.ema_std_delta_error = 1e-10
 
-        self.delta_penalty_counter = 0
+        self.delta_penalize = 0
+        self.max_delta = 10e-15
 
 
     def _init_memory_state(self,state):
@@ -77,10 +78,10 @@ class compute_process:
         self.ema_mean_state += self.ema_alpha_state * diff
         self.ema_std_state += self.ema_alpha_state * (abs(diff) - self.ema_std_state)
 
-    def update_ema_delta_error(self,new_delta):
-        diff = new_delta - self.ema_mean_delta_error
-        self.ema_mean_delta_error += self.ema_alpha_delta_error * diff
-        self.ema_std_delta_error += self.ema_alpha_delta_error * (abs(diff) - self.ema_std_delta_error)
+    # def update_ema_delta_error(self,new_delta):
+    #     diff = new_delta - self.ema_mean_delta_error
+    #     self.ema_mean_delta_error += self.ema_alpha_delta_error * diff
+    #     self.ema_std_delta_error += self.ema_alpha_delta_error * (abs(diff) - self.ema_std_delta_error)
 
     def max_min_normalization(self, value, max, min):
         
@@ -234,54 +235,28 @@ class compute_process:
 
         min_val, max_val = reward_range
         rescaled_reward = min_val + (max_val - min_val) * ((raw_reward - raw_min) / (raw_max - raw_min))
+        if error >= 0.7:
+            return -10
         
         return rescaled_reward
     
-    def reward_funtion_delta_error(self, reward_range=(-0.1, 1.0), 
-                                    tolerance_delta: float = 1e-4, 
-                                    tolerance_error=0.05,
-                                    stagnation_penalty=-0.3,
-                                    improvement_bonus=0.5):
-        error_array = np.array(self.error)
-        delta_array = np.diff(np.abs(error_array))
-        delta = np.sum(delta_array)
-        self.delta_error.append(delta)
-
-        self.update_ema_delta_error(delta)
-
-        # Trend detection (เช็คว่า error ลดลงต่อเนื่องไหม)
-        trend = np.polyfit(np.arange(len(error_array)), error_array, 1)[0]  # slope
-
-        # กรณี converge
-        if abs(self.error[-1]) < tolerance_error and delta < tolerance_delta:
-            return reward_range[1] + improvement_bonus  # รางวัลพิเศษ
-
-        # กรณี error แกว่งน้อยเกินไป → อาจแปลว่านิ่งแต่ไม่ converge
-        if np.mean(self.delta_error) < tolerance_delta:
-            self.delta_penalty_counter -= 0.1
-            return -(abs(self.delta_penalty_counter) + abs(stagnation_penalty))
-
-        # คำนวณ reward base ด้วย tanh ตามเดิม
-        z_score = self.z_score_mromalization(
-            value=delta,
-            mean=self.ema_mean_delta_error,
-            deviation=self.ema_std_delta_error + 1e-8
-        )
-        score = -np.tanh(z_score)  # ยิ่ง delta มาก → ยิ่งน้อยลง
-        reward = reward_range[0] + (reward_range[1] - reward_range[0]) * ((score + 1) / 2)
-
-        # เพิ่มหรือลดตาม trend
-        if trend < 0:
-            self.delta_penalty_counter += 0.1
-            reward += 0.1 +  self.delta_penalty_counter 
-        elif trend > 0:
-            self.delta_penalty_counter -= 0.1
-            reward +=  self.delta_penalty_counter
-
-        self.delta_penalty_counter  =   np.clip( self.delta_penalty_counter,-1,1)
-
-        return np.clip(reward, reward_range[0], reward_range[1])
-
+    def reward_funtion_delta_error(self, reward_range=(-0.1, 1.0)):
+        pass
+        self.delta_penalize = np.clip(self.delta_penalize,-1,1)
+        if len(self.error) < 2:
+            return 0
+        delta = np.sum(np.diff(np.abs(self.error)))
+        self.delta_memory.append(delta)
+        
+        if self.delta_memory[-1] < 0:
+            self.delta_penalize -= 0.1
+            if self.delta_memory[-1] < self.max_delta:
+                self.max_delta = self.delta_memory[-1]
+            return delta / self.max_delta * (-self.delta_penalize)
+        
+        else:
+            self.delta_penalize += 0.1
+            return -1 * self.delta_penalize
 
     def reward_function_action(self, reward_range=(-0.3, 1.0), 
                             smooth_threshold=0.1,

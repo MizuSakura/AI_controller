@@ -28,7 +28,7 @@ logger = Logger()
 step_max = 10000
 episode = 1000
 MAX_RUNTIME = timedelta(minutes=5)
-Folder = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\normalized4'
+Folder = r'D:\Project_end\DDPG_NEW_git\Auto_save_data_log\normalized5'
 
 try:
     for ep in range(episode):
